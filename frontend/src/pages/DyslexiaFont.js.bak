@@ -1,0 +1,430 @@
+// src/pages/DyslexiaFont.js
+import React, { useState, useRef, useEffect } from "react";
+import { ArrowLeft } from "lucide-react";
+import { Link } from "react-router-dom";
+import Webcam from "react-webcam";
+
+// Load local PDF worker (required)
+import "../pdf-worker";
+
+export default function DyslexiaFont() {
+  // Editor state
+  const [text, setText] = useState("Type or paste text here...");
+  const [fontFamily, setFontFamily] = useState("Arial");
+  const [fontSize, setFontSize] = useState(20);
+  const [lineHeight, setLineHeight] = useState(1.6);
+  const [letterSpacing, setLetterSpacing] = useState(0);
+  const [bgColor, setBgColor] = useState("#fffef0");
+  const [textColor, setTextColor] = useState("#222222");
+
+  // Camera states
+  const webcamRef = useRef(null);
+  const [showCamera, setShowCamera] = useState(false);
+
+  // Summarization
+  const [summary, setSummary] = useState("");
+  const [isSummarizing, setIsSummarizing] = useState(false);
+
+  // TTS (line by line)
+  const [rate, setRate] = useState(1.0);
+  const [isReading, setIsReading] = useState(false);
+  const [currentLine, setCurrentLine] = useState(0);
+  const linesRef = useRef([]);
+
+  // Available fonts
+  const availableFonts = [
+    "Arial",
+    "Verdana",
+    "Helvetica",
+    "Georgia",
+    "Times New Roman",
+    "OpenDyslexic",
+    "Comic Sans MS",
+    "Calibri",
+    "Trebuchet MS",
+    "Tahoma",
+    "Courier New",
+    "Poppins",
+    "Nunito",
+    "Roboto",
+    "Montserrat",
+    "Ubuntu",
+  ];
+
+  // -------------------------
+  // FILE UPLOAD HANDLER
+  // -------------------------
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const name = file.name.toLowerCase();
+
+    // TXT
+    if (name.endsWith(".txt")) {
+      const txt = await file.text();
+      setText(txt);
+      return;
+    }
+
+    // PDF
+    if (name.endsWith(".pdf")) {
+      const pdfjs = await import("pdfjs-dist/build/pdf");
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+      let extracted = "";
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        extracted += content.items.map((it) => it.str).join(" ") + "\n";
+      }
+
+      setText(extracted);
+      return;
+    }
+
+    // DOCX
+    if (name.endsWith(".docx") || name.endsWith(".doc")) {
+      const mammoth = await import("mammoth");
+      const buff = await file.arrayBuffer();
+      const { value } = await mammoth.extractRawText({ arrayBuffer: buff });
+      setText(value);
+      return;
+    }
+
+    // IMAGE → OCR
+    if ([".png", ".jpg", ".jpeg", ".bmp"].some((x) => name.endsWith(x))) {
+      const Tesseract = await import("tesseract.js");
+      const result = await Tesseract.recognize(file, "eng", {
+        tessedit_char_blacklist: "|{}~",
+      });
+      setText(result.data.text);
+      return;
+    }
+
+    alert("Unsupported file type");
+  }
+
+  // -------------------------
+  // CAMERA CAPTURE
+  // -------------------------
+  async function captureImage() {
+    const screenshot = webcamRef.current.getScreenshot();
+    const Tesseract = await import("tesseract.js");
+
+    const result = await Tesseract.recognize(screenshot, "eng");
+    setText(result.data.text);
+
+    setShowCamera(false);
+  }
+
+  // -------------------------
+  // SUMMARIZATION
+  // -------------------------
+  async function requestSummary() {
+    if (!text.trim()) return alert("Nothing to summarize.");
+
+    setIsSummarizing(true);
+    setSummary("");
+
+    try {
+      const res = await fetch("http://localhost:5000/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      const data = await res.json();
+      setSummary(data.summary || "No summary returned.");
+    } catch {
+      alert("Error: Backend is not running at port 5000");
+    }
+
+    setIsSummarizing(false);
+  }
+
+  // -------------------------
+  // LINE-BY-LINE TTS
+  // -------------------------
+  const speakLine = (line) =>
+    new Promise((resolve) => {
+      const utter = new SpeechSynthesisUtterance(line);
+      utter.rate = rate;
+      utter.onend = resolve;
+      window.speechSynthesis.speak(utter);
+    });
+
+  async function startReading() {
+    if (!window.speechSynthesis) return alert("TTS not supported");
+    const lines = text.split("\n");
+    linesRef.current = lines;
+    setIsReading(true);
+
+    for (let i = 0; i < lines.length; i++) {
+      if (!isReading) break;
+      setCurrentLine(i);
+
+      if (lines[i].trim() !== "") await speakLine(lines[i]);
+    }
+
+    stopReading();
+  }
+
+  function stopReading() {
+    window.speechSynthesis.cancel();
+    setIsReading(false);
+    setCurrentLine(0);
+  }
+
+  // -------------------------
+  // UI RENDER
+  // -------------------------
+
+  const lines = text.split("\n");
+
+  return (
+    <div className="app-bg min-h-screen flex items-center justify-center p-6">
+      <div className="glass-card center-max p-6 w-full">
+        {/* HEADER */}
+        <div className="flex items-center justify-between mb-4">
+          <Link to="/" className="flex items-center gap-2 text-gray-600">
+            <ArrowLeft size={16} /> Back
+          </Link>
+          <h2 className="font-bold text-lg">Dyslexia-Friendly Reader</h2>
+        </div>
+
+        {/* CAMERA MODAL */}
+        {showCamera && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white p-4 rounded-lg w-[350px] shadow-lg">
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/png"
+                className="rounded mb-2"
+              />
+              <button
+                onClick={captureImage}
+                className="w-full bg-green-600 text-white p-2 rounded mt-2"
+              >
+                Capture
+              </button>
+              <button
+                onClick={() => setShowCamera(false)}
+                className="w-full bg-gray-500 text-white p-2 rounded mt-2"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* LEFT CONTROLS */}
+          <div className="space-y-4">
+            {/* Font Family */}
+            <div>
+              <label className="font-semibold">Font</label>
+              <select
+                className="w-full p-2 border rounded mt-1"
+                value={fontFamily}
+                onChange={(e) => setFontFamily(e.target.value)}
+              >
+                {availableFonts.map((f) => (
+                  <option key={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sliders */}
+            <div>
+              <label className="font-semibold">Font Size: {fontSize}px</label>
+              <input
+                type="range"
+                min="14"
+                max="40"
+                value={fontSize}
+                onChange={(e) => setFontSize(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold">
+                Line Height: {lineHeight}
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="2.4"
+                step="0.1"
+                value={lineHeight}
+                onChange={(e) => setLineHeight(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold">
+                Letter Spacing: {letterSpacing}px
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="4"
+                step="0.1"
+                value={letterSpacing}
+                onChange={(e) => setLetterSpacing(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            {/* Colors */}
+            <div>
+              <label className="font-semibold">Background</label>
+              <input
+                type="color"
+                value={bgColor}
+                onChange={(e) => setBgColor(e.target.value)}
+                className="w-full h-10 border rounded mt-1"
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold">Text Color</label>
+              <input
+                type="color"
+                value={textColor}
+                onChange={(e) => setTextColor(e.target.value)}
+                className="w-full h-10 border rounded mt-1"
+              />
+            </div>
+
+            {/* Upload */}
+            <div>
+              <label className="font-semibold">Upload File</label>
+              <input
+                type="file"
+                accept=".txt,.pdf,.doc,.docx,.png,.jpg,.jpeg,.bmp"
+                onChange={handleFileUpload}
+                className="mt-1"
+              />
+              <button
+                className="w-full bg-blue-600 text-white p-2 rounded mt-2"
+                onClick={() => setShowCamera(true)}
+              >
+                📷 Open Camera
+              </button>
+            </div>
+
+            {/* TTS */}
+            <div>
+              <label className="font-semibold">Reading Speed: {rate}x</label>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={rate}
+                onChange={(e) => setRate(Number(e.target.value))}
+                className="w-full"
+              />
+
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={startReading}
+                  disabled={isReading}
+                  className="px-4 py-2 bg-green-600 text-white rounded"
+                >
+                  Start Reading
+                </button>
+                <button
+                  onClick={stopReading}
+                  className="px-4 py-2 border rounded"
+                >
+                  Stop
+                </button>
+              </div>
+            </div>
+
+            {/* Summarize */}
+            <button
+              onClick={requestSummary}
+              className="w-full px-4 py-2 bg-indigo-600 text-white rounded"
+              disabled={isSummarizing}
+            >
+              {isSummarizing ? "Summarizing..." : "Summarize"}
+            </button>
+          </div>
+
+          {/* RIGHT PANEL */}
+          <div>
+            <label className="font-semibold">Editor</label>
+
+            {/* If reading line-by-line, show highlighted version */}
+            {isReading ? (
+              <div
+                className="p-4 mt-2 rounded border"
+                style={{ background: bgColor, color: textColor }}
+              >
+                {lines.map((ln, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: "4px",
+                      background:
+                        i === currentLine
+                          ? "rgba(255,255,0,0.5)"
+                          : "transparent",
+                    }}
+                  >
+                    {ln || "\u00A0"}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={12}
+                className="w-full p-4 mt-2 rounded border"
+                style={{
+                  background: bgColor,
+                  color: textColor,
+                  fontFamily,
+                  fontSize,
+                  lineHeight,
+                  letterSpacing,
+                }}
+              />
+            )}
+
+            {/* Summary */}
+            <div className="mt-4 p-3 rounded border bg-white/70">
+              <label className="font-semibold">Summary</label>
+              <div className="mt-2">
+                {summary ? (
+                  <>
+                    <div>{summary}</div>
+                    <button
+                      onClick={() => setText(summary)}
+                      className="mt-2 px-3 py-1 rounded border"
+                    >
+                      Replace Editor
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-gray-600">
+                    No summary yet — click Summarize.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
