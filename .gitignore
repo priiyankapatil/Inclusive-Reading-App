@@ -1,0 +1,15 @@
+# Ignore node modules everywhere
+node_modules/
+**/node_modules/
+
+# Ignore models directories
+models/
+**/models/
+
+# Common extras
+.env
+.DS_Store
+service_account.json
+uploads/
+dist/
+build/
