@@ -77,16 +77,37 @@ class TTSService:
         # Generate speech
         output = self.pipeline(text)
         
+        # Validate output
+        if output is None:
+            raise Exception("TTS pipeline returned None - model may not be properly initialized")
+        
+        if not isinstance(output, dict) or 'audio' not in output:
+            raise Exception(f"Unexpected output format from TTS pipeline: {type(output)}")
+        
         # Extract audio data
-        audio_data = output['audio']
-        sampling_rate = output['sampling_rate']
+        audio_data = output.get('audio')
+        sampling_rate = output.get('sampling_rate', 22050)  # Default sampling rate
+        
+        # Validate audio data
+        if audio_data is None:
+            raise Exception("TTS pipeline returned None for audio data")
         
         # Convert to numpy array if it's a tensor
         if torch.is_tensor(audio_data):
             audio_data = audio_data.cpu().numpy()
         
+        # Additional validation
+        if not isinstance(audio_data, np.ndarray):
+            raise Exception(f"Audio data is not a valid array type: {type(audio_data)}")
+        
+        if audio_data.size == 0:
+            raise Exception("Audio data is empty")
+        
         # Ensure audio is in correct format (int16)
         if audio_data.dtype != np.int16:
+            # Normalize to [-1, 1] range if needed
+            if np.abs(audio_data).max() > 1.0:
+                audio_data = audio_data / np.abs(audio_data).max()
             audio_data = (audio_data * 32767).astype(np.int16)
         
         # Create WAV file in memory

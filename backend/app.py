@@ -143,6 +143,13 @@ def tts():
     Returns: JSON with base64 encoded audio
     """
     try:
+        # Check if TTS service is initialized
+        if not tts_service.is_initialized():
+            return jsonify({
+                "error": "TTS service not available",
+                "details": "The TTS model is not initialized. Please enable model downloading in tts_service.py"
+            }), 503
+        
         # Get data from request
         data = request.get_json()
         if not data or 'text' not in data:
@@ -174,6 +181,13 @@ def synthesize_speech():
     Returns: Audio file (WAV format)
     """
     try:
+        # Check if TTS service is initialized
+        if not tts_service.is_initialized():
+            return jsonify({
+                "error": "TTS service not available",
+                "details": "The TTS model is not initialized. Please enable model downloading in tts_service.py"
+            }), 503
+        
         # Get text from request
         data = request.get_json()
         if not data or 'text' not in data:
