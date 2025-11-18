@@ -135,6 +135,37 @@ def chat():
 # Text-to-Speech Endpoints
 # ============================================================================
 
+@app.route('/tts', methods=['POST'])
+def tts():
+    """
+    TTS endpoint for frontend - Returns base64 encoded audio in JSON
+    Expects JSON: {"text": "Your text here", "voice": "alloy" (optional)}
+    Returns: JSON with base64 encoded audio
+    """
+    try:
+        # Get data from request
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({"error": "Missing 'text' field in request"}), 400
+        
+        text = data['text']
+        voice = data.get('voice', 'alloy')  # Voice parameter for future use
+        
+        # Use the TTS service
+        result = tts_service.synthesize_base64(text)
+        
+        return jsonify(result)
+    
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    except Exception as err:
+        print(f"TTS ERROR: {err}")
+        return jsonify({
+            "error": "Text-to-speech synthesis failed",
+            "details": str(err)
+        }), 500
+
+
 @app.route('/synthesize', methods=['POST'])
 def synthesize_speech():
     """
