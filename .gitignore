@@ -2,9 +2,7 @@
 node_modules/
 **/node_modules/
 
-# Ignore models directories
-models/
-**/models/
+
 
 # Common extras
 .env
