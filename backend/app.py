@@ -10,7 +10,8 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from services.summarization_service import SummarizationService
 from services.tts_service import TTSService
-# from services.translation_service import TranslationService  # Temporarily disabled due to dependency conflicts
+from services.ocr_service import OCRService
+from services.translation_service import TranslationService
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend communication
@@ -18,7 +19,8 @@ CORS(app)  # Enable CORS for frontend communication
 # Initialize services
 summarization_service = SummarizationService()
 tts_service = TTSService()
-# translation_service = TranslationService()  # Temporarily disabled
+ocr_service = OCRService()
+translation_service = TranslationService()
 
 @app.before_request
 def initialize():
@@ -38,12 +40,11 @@ def initialize():
             print(f"Warning: Failed to initialize TTS service: {e}")
     
     # Initialize translation service if not already loaded
-    # Temporarily disabled due to dependency conflicts
-    # if not translation_service.is_initialized():
-    #     try:
-    #         translation_service.initialize()
-    #     except Exception as e:
-    #         print(f"Warning: Failed to initialize translation service: {e}")
+    if not translation_service.is_initialized():
+        try:
+            translation_service.initialize()
+        except Exception as e:
+            print(f"Warning: Failed to initialize translation service: {e}")
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -61,9 +62,13 @@ def health_check():
                 "device": tts_service.get_device(),
                 "loaded": tts_service.is_initialized()
             },
+            "ocr": {
+                "loaded": ocr_service.is_initialized(),
+                "api_configured": ocr_service.is_initialized()
+            },
             "translation": {
-                "loaded": False,
-                "supported_languages": []
+                "loaded": translation_service.is_initialized(),
+                "supported_languages": TranslationService.get_supported_languages()
             }
         }
     })
@@ -196,36 +201,123 @@ def synthesize_json():
 
 
 # ============================================================================
+# OCR Endpoints
+# ============================================================================
+
+@app.route('/ocr', methods=['POST'])
+def ocr():
+    """
+    OCR endpoint - Extracts text from image
+    Expects JSON: {"image": "base64_encoded_image_data"}
+    Returns: JSON with extracted text
+    """
+    try:
+        # Get image data from request
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({"error": "Missing 'image' field in request"}), 400
+        
+        image_data = data['image']
+        language = data.get('language', 'eng')  # Default to English
+        
+        # Use the OCR service
+        extracted_text = ocr_service.extract_text_from_base64(image_data, language=language)
+        
+        return jsonify({"text": extracted_text})
+    
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    except Exception as err:
+        print(f"OCR ERROR: {err}")
+        return jsonify({
+            "error": "OCR processing failed",
+            "details": str(err)
+        }), 500
+
+
+# ============================================================================
 # Translation Endpoints
 # ============================================================================
 
 @app.route('/translate', methods=['POST'])
 def translate():
     """
-    Translation endpoint - TEMPORARILY DISABLED
+    Translation endpoint
     Expects JSON: {"text": "Your text here", "targetLang": "Hindi"}
     Returns: JSON with translated text
     """
-    return jsonify({"error": "Translation service temporarily disabled due to dependency conflicts"}), 503
+    try:
+        # Get data from request
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({"error": "Missing 'text' field in request"}), 400
+        
+        if 'targetLang' not in data:
+            return jsonify({"error": "Missing 'targetLang' field in request"}), 400
+        
+        text = data['text']
+        target_lang = data['targetLang']
+        
+        # Use the translation service
+        result = translation_service.translate(text, target_lang)
+        
+        return jsonify(result)
+    
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    except Exception as err:
+        print(f"TRANSLATION ERROR: {err}")
+        return jsonify({
+            "error": "Translation failed",
+            "details": str(err)
+        }), 500
 
 
 @app.route('/detect-language', methods=['POST'])
 def detect_language():
     """
-    Language detection endpoint - TEMPORARILY DISABLED
+    Language detection endpoint
     Expects JSON: {"text": "Your text here"}
     Returns: JSON with detected language and confidence
     """
-    return jsonify({"error": "Language detection service temporarily disabled due to dependency conflicts"}), 503
+    try:
+        # Get data from request
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({"error": "Missing 'text' field in request"}), 400
+        
+        text = data['text']
+        
+        # Use the translation service
+        result = translation_service.detect_language(text)
+        
+        return jsonify(result)
+    
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    except Exception as err:
+        print(f"LANGUAGE DETECTION ERROR: {err}")
+        return jsonify({
+            "error": "Language detection failed",
+            "details": str(err)
+        }), 500
 
 
 @app.route('/supported-languages', methods=['GET'])
 def supported_languages():
     """
-    Get list of supported languages for translation - TEMPORARILY DISABLED
+    Get list of supported languages for translation
     Returns: JSON with list of supported languages
     """
-    return jsonify({"error": "Translation service temporarily disabled due to dependency conflicts"}), 503
+    try:
+        languages = TranslationService.get_supported_languages()
+        return jsonify({"languages": languages})
+    except Exception as err:
+        print(f"SUPPORTED LANGUAGES ERROR: {err}")
+        return jsonify({
+            "error": "Failed to retrieve supported languages",
+            "details": str(err)
+        }), 500
 
 
 if __name__ == '__main__':

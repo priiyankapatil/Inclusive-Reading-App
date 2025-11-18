@@ -1,0 +1,28 @@
+# Core dependenciesflask>=3.0.0
+
+flask>=2.3.0transformers>=4.35.0
+
+flask-cors>=4.0.0torch>=2.0.0
+
+requests>=2.31.0huggingface-hub>=0.19.0
+
+tqdm>=4.66.0
+
+# ML and AI dependenciesaccelerate>=0.24.0
+
+transformers>=4.30.0scipy>=1.11.0
+
+torch>=2.0.0numpy>=1.24.0
+
+huggingface_hub>=0.15.0deep-translator>=1.11.4
+
+tqdm>=4.65.0langdetect>=1.0.9
+
+accelerate>=0.20.0flask-cors>=4.0.0
+
+scipy>=1.10.0groq>=0.4.0
+
+numpy>=1.24.0
+
+# Environment variables
+python-dotenv>=1.0.0
