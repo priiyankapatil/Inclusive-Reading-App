@@ -14,7 +14,10 @@ export default function InputControls({
         accept=".txt,.pdf,.doc,.docx,.png,.jpg,.jpeg,.bmp"
       />
       <button
-        onClick={onOpenCamera}
+        onClick={() => {
+          console.log("Camera button clicked");
+          onOpenCamera?.();
+        }}
         className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition"
       >
         📷 Open Camera

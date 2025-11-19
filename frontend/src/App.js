@@ -8,6 +8,11 @@ import Summarization from "./pages/Summarization";
 import TranslationTool from "./pages/TranslationTool";
 import "./index.css";
 
+// Import camera debug utility in development
+if (process.env.NODE_ENV === 'development') {
+  import('./utils/cameraDebug');
+}
+
 function HomePage() {
   const tools = [
     { name: "Dyslexia Font", path: "/dyslexia-font", icon: <BookOpen size={36} /> },
